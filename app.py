@@ -13,7 +13,17 @@ download_url = f"https://drive.google.com/uc?id={file_id}"
 
 # Load the CSV directly
 df_imp_all = pd.read_csv(download_url)
-``
+
+
+try:
+    st.write("Attempting to load data...")
+    df_imp_all = pd.read_csv(download_url)
+    st.success("Data loaded successfully!")
+    st.write("Columns in CSV:", df_imp_all.columns.tolist())
+except Exception as e:
+    st.error(f"Failed to load data: {e}")
+    st.stop()
+
 
 # Rename columns for consistency
 df_imp_all = df_imp_all.rename(columns={
@@ -63,5 +73,6 @@ st.dataframe(top_countries)
 # Show filtered data
 st.subheader("Filtered Data Preview")
 st.dataframe(filtered_df.head(100))
+
 
 
