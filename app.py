@@ -1,4 +1,3 @@
-
 import streamlit as st
 import pandas as pd
 
@@ -9,7 +8,7 @@ st.title("Trade Data Explorer")
 file_id = "1ZWuhhnlmCLB66v5h3aQ9wE8o5WGNXLq6"
 download_url = f"https://drive.google.com/uc?id={file_id}"
 
-# Sidebar filters (set defaults first)
+# Sidebar filters
 st.sidebar.header("Filters")
 selected_years = st.sidebar.multiselect("Select Year(s):", [])
 selected_country = st.sidebar.text_input("Country filter (optional):")
@@ -23,8 +22,11 @@ filtered_chunks = []
 st.info("Loading data in chunks...")
 try:
     for chunk in pd.read_csv(download_url, chunksize=chunksize):
-        # Rename columns for consistency
-        chunk = chunk.rename(columns={
+        # Debug: Show columns in each chunk
+        st.write("Columns in current chunk:", chunk.columns.tolist())
+
+        # Dynamic rename
+        rename_map = {
             "HS10": "HS10",
             "Country/Pays": "Country",
             "Province": "Province",
@@ -33,12 +35,17 @@ try:
             "YearMonth/AnnéeMois": "YearMonth",
             "Value/Valeur": "Value",
             "Quantity/Quantité": "Quantity"
-        })
+        }
+        chunk = chunk.rename(columns={k: v for k, v in rename_map.items() if k in chunk.columns})
 
-        # Extract Year and Month
-        chunk["Year"] = chunk["YearMonth"] // 100
-        chunk["Month"] = chunk["YearMonth"] % 100
-        chunk["MonthName"] = pd.to_datetime(chunk["Month"], format="%m").dt.strftime("%b")
+        # Check if YearMonth exists
+        if "YearMonth" in chunk.columns:
+            chunk["Year"] = chunk["YearMonth"] // 100
+            chunk["Month"] = chunk["YearMonth"] % 100
+            chunk["MonthName"] = pd.to_datetime(chunk["Month"], format="%m").dt.strftime("%b")
+        else:
+            st.warning("YearMonth column not found in this chunk.")
+            continue
 
         # Apply filters
         if selected_years:
