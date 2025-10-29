@@ -3,25 +3,17 @@
 
 import streamlit as st
 import pandas as pd
-import gdown
-import os
 
 st.set_page_config(layout="wide")
 st.title("Trade Data Explorer")
 
-# Google Drive file ID (replace with your actual file ID)
-#https://drive.google.com/file/d/1ZWuhhnlmCLB66v5h3aQ9wE8o5WGNXLq6/view?usp=sharing
+# Direct download link
 file_id = "1ZWuhhnlmCLB66v5h3aQ9wE8o5WGNXLq6"
 download_url = f"https://drive.google.com/uc?id={file_id}"
-local_filename = "df_imp_all.csv"
 
-# Download the file if it doesn't exist locally
-if not os.path.exists(local_filename):
-    st.info("Downloading data from Google Drive...")
-    gdown.download(download_url, local_filename, quiet=False)
-
-# Load the CSV
-df_imp_all = pd.read_csv(local_filename)
+# Load the CSV directly
+df_imp_all = pd.read_csv(download_url)
+``
 
 # Rename columns for consistency
 df_imp_all = df_imp_all.rename(columns={
@@ -71,4 +63,5 @@ st.dataframe(top_countries)
 # Show filtered data
 st.subheader("Filtered Data Preview")
 st.dataframe(filtered_df.head(100))
+
 
