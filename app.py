@@ -8,11 +8,11 @@ st.set_page_config(layout="wide")
 st.title("Trade Data Explorer")
 
 # ✅ Kaggle Credentials (use st.secrets for security)
-os.environ['KAGGLE_USERNAME'] = st.secrets["KAGGLE_USERNAME"]
-os.environ['KAGGLE_KEY'] = st.secrets["KAGGLE_KEY"]
+os.environ['shevaserrattan'] = st.secrets["shevaserrattan"]
+os.environ['15bc60c20be523ca40e7c439dab2a86f'] = st.secrets["15bc60c20be523ca40e7c439dab2a86f"]
 
 # ✅ Kaggle Dataset Info
-dataset_slug = "yourusername/yourdatasetname"  # Replace with your Kaggle dataset slug
+dataset_slug = "shevaserrattan/df_imp_all"  # Replace with your Kaggle dataset slug
 local_filename = "df_imp_all.csv"
 data_dir = "data"
 
@@ -102,3 +102,4 @@ try:
 except Exception as e:
     st.error(f"Failed to load data: {e}")
     st.stop()
+
