@@ -12,7 +12,7 @@ os.environ['KAGGLE_USERNAME'] = st.secrets["KAGGLE_USERNAME"]
 os.environ['KAGGLE_KEY'] = st.secrets["KAGGLE_KEY"]
 
 # ✅ Kaggle Dataset Info
-dataset_slug = "yourusername/yourdatasetname"  # Replace with your Kaggle dataset slug
+dataset_slug = "shevaserrattan/can-sut20232024"  # Replace with your Kaggle dataset slug
 local_filename = "df_imp_all.csv"
 data_dir = "data"
 
@@ -106,3 +106,4 @@ try:
 except Exception as e:
     st.error(f"Failed to load data: {e}")
     st.stop()
+
