@@ -1,12 +1,20 @@
 import streamlit as st
 import pandas as pd
+import gdown
+import os
 
 st.set_page_config(layout="wide")
 st.title("Trade Data Explorer")
 
-# Direct Google Drive link
+# Google Drive file ID
 file_id = "1ZWuhhnlmCLB66v5h3aQ9wE8o5WGNXLq6"
 download_url = f"https://drive.google.com/uc?id={file_id}"
+local_filename = "df_imp_all.csv"
+
+# Download if not exists
+if not os.path.exists(local_filename):
+    st.info("Downloading large file from Google Drive...")
+    gdown.download(download_url, local_filename, quiet=False)
 
 # Sidebar filters
 st.sidebar.header("Filters")
@@ -16,15 +24,12 @@ selected_province = st.sidebar.text_input("Province filter (optional):")
 selected_state = st.sidebar.text_input("State filter (optional):")
 
 # Chunked loading
-chunksize = 100000  # Adjust based on memory
+chunksize = 100000
 filtered_chunks = []
 
 st.info("Loading data in chunks...")
 try:
-    for chunk in pd.read_csv(download_url, chunksize=chunksize):
-        # Debug: Show columns in each chunk
-        st.write("Columns in current chunk:", chunk.columns.tolist())
-
+    for chunk in pd.read_csv(local_filename, chunksize=chunksize):
         # Dynamic rename
         rename_map = {
             "HS10": "HS10",
@@ -38,13 +43,11 @@ try:
         }
         chunk = chunk.rename(columns={k: v for k, v in rename_map.items() if k in chunk.columns})
 
-        # Check if YearMonth exists
         if "YearMonth" in chunk.columns:
             chunk["Year"] = chunk["YearMonth"] // 100
             chunk["Month"] = chunk["YearMonth"] % 100
             chunk["MonthName"] = pd.to_datetime(chunk["Month"], format="%m").dt.strftime("%b")
         else:
-            st.warning("YearMonth column not found in this chunk.")
             continue
 
         # Apply filters
@@ -60,7 +63,6 @@ try:
         if not chunk.empty:
             filtered_chunks.append(chunk)
 
-    # Combine filtered chunks
     if filtered_chunks:
         filtered_df = pd.concat(filtered_chunks)
         st.success(f"Loaded {len(filtered_df)} rows after filtering.")
