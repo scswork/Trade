@@ -1,29 +1,43 @@
 import streamlit as st
 import pandas as pd
-import gdown
 import os
+import subprocess
 
+# ✅ Page Config
 st.set_page_config(layout="wide")
 st.title("Trade Data Explorer")
 
-# Google Drive file ID
-file_id = "1ZWuhhnlmCLB66v5h3aQ9wE8o5WGNXLq6"
-download_url = f"https://drive.google.com/uc?id={file_id}"
+# ✅ Kaggle Credentials (use st.secrets for security)
+os.environ['KAGGLE_USERNAME'] = st.secrets["KAGGLE_USERNAME"]
+os.environ['KAGGLE_KEY'] = st.secrets["KAGGLE_KEY"]
+
+# ✅ Kaggle Dataset Info
+dataset_slug = "yourusername/yourdatasetname"  # Replace with your Kaggle dataset slug
 local_filename = "df_imp_all.csv"
+data_dir = "data"
 
-# Download if not exists
+# ✅ Download dataset if not exists
 if not os.path.exists(local_filename):
-    st.info("Downloading large file from Google Drive...")
-    gdown.download(download_url, local_filename, quiet=False)
+    st.info("Downloading dataset from Kaggle...")
+    os.makedirs(data_dir, exist_ok=True)
+    subprocess.run([
+        "kaggle", "datasets", "download",
+        "-d", dataset_slug,
+        "--unzip", "-p", data_dir
+    ])
+    # Assume the CSV is inside data_dir after unzip
+    for file in os.listdir(data_dir):
+        if file.endswith(".csv"):
+            os.rename(os.path.join(data_dir, file), local_filename)
 
-# Sidebar filters
+# ✅ Sidebar Filters
 st.sidebar.header("Filters")
 selected_years = st.sidebar.multiselect("Select Year(s):", [])
 selected_country = st.sidebar.text_input("Country filter (optional):")
 selected_province = st.sidebar.text_input("Province filter (optional):")
 selected_state = st.sidebar.text_input("State filter (optional):")
 
-# Chunked loading
+# ✅ Chunked Loading
 chunksize = 100000
 filtered_chunks = []
 
