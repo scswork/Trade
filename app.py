@@ -7,12 +7,12 @@ import subprocess
 st.set_page_config(layout="wide")
 st.title("Trade Data Explorer")
 
-# ✅ Kaggle Credentials (use st.secrets for security)
-os.environ['shevaserrattan'] = st.secrets["shevaserrattan"]
-os.environ['15bc60c20be523ca40e7c439dab2a86f'] = st.secrets["15bc60c20be523ca40e7c439dab2a86f"]
+# ✅ Kaggle Credentials
+os.environ['KAGGLE_USERNAME'] = st.secrets["KAGGLE_USERNAME"]
+os.environ['KAGGLE_KEY'] = st.secrets["KAGGLE_KEY"]
 
 # ✅ Kaggle Dataset Info
-dataset_slug = "shevaserrattan/df_imp_all"  # Replace with your Kaggle dataset slug
+dataset_slug = "yourusername/yourdatasetname"  # Replace with your Kaggle dataset slug
 local_filename = "df_imp_all.csv"
 data_dir = "data"
 
@@ -20,12 +20,17 @@ data_dir = "data"
 if not os.path.exists(local_filename):
     st.info("Downloading dataset from Kaggle...")
     os.makedirs(data_dir, exist_ok=True)
-    subprocess.run([
+    result = subprocess.run([
         "kaggle", "datasets", "download",
         "-d", dataset_slug,
         "--unzip", "-p", data_dir
-    ])
-    # Assume the CSV is inside data_dir after unzip
+    ], capture_output=True, text=True)
+
+    if result.returncode != 0:
+        st.error(f"Download failed: {result.stderr}")
+        st.stop()
+
+    # Find CSV file and rename
     for file in os.listdir(data_dir):
         if file.endswith(".csv"):
             os.rename(os.path.join(data_dir, file), local_filename)
@@ -44,7 +49,6 @@ filtered_chunks = []
 st.info("Loading data in chunks...")
 try:
     for chunk in pd.read_csv(local_filename, chunksize=chunksize):
-        # Dynamic rename
         rename_map = {
             "HS10": "HS10",
             "Country/Pays": "Country",
@@ -102,4 +106,3 @@ try:
 except Exception as e:
     st.error(f"Failed to load data: {e}")
     st.stop()
-
