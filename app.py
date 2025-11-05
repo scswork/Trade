@@ -118,3 +118,5 @@ if load_data:
             mime="text/csv"
         )
 else:
+    st.info("Click **Load & Apply Filters** to start. No heavy processing until you click.")
+
