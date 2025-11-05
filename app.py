@@ -46,9 +46,10 @@ def load_full_data():
     return df
 
 if load_data:
-    # ✅ Download dataset if not exists
+    # ✅ Download dataset only when button clicked
     if not os.path.exists(local_filename):
-        with st.spinner("Downloading dataset from Kaggle..."):
+        st.info("Dataset not found. Downloading from Kaggle...")
+        with st.spinner("Downloading dataset..."):
             os.makedirs(data_dir, exist_ok=True)
             result = subprocess.run([
                 "kaggle", "datasets", "download",
@@ -117,4 +118,3 @@ if load_data:
             mime="text/csv"
         )
 else:
-    st.info("Click **Load & Apply Filters** to start. No heavy processing until you click.")
