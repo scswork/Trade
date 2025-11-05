@@ -119,4 +119,3 @@ if load_data:
         )
 else:
     st.info("Click **Load & Apply Filters** to start. No heavy processing until you click.")
-
