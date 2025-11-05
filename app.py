@@ -17,11 +17,11 @@ st.set_page_config(layout="wide")
 st.title("Trade Data Explorer")
 
 try:
-    # ✅ Sidebar first (UI loads immediately)
+    # ✅ Sidebar first
     st.sidebar.header("Filters")
     st.info("Initializing app...")
 
-    # ✅ Kaggle Credentials Check
+    # ✅ Kaggle Credentials
     try:
         os.environ['KAGGLE_USERNAME'] = st.secrets["KAGGLE_USERNAME"]
         os.environ['KAGGLE_KEY'] = st.secrets["KAGGLE_KEY"]
@@ -52,7 +52,7 @@ try:
                 if file.endswith(".csv"):
                     os.rename(os.path.join(data_dir, file), local_filename)
 
-    # ✅ Column rename map for bilingual headers
+    # ✅ Column rename map
     rename_map = {
         "HS10": "HS10",
         "Country/Pays": "Country",
@@ -69,7 +69,9 @@ try:
     def load_unique_values():
         sample = pd.read_csv(local_filename, nrows=50000)
         sample.rename(columns={k: v for k, v in rename_map.items() if k in sample.columns}, inplace=True)
-        years = sorted(sample["YearMonth"] // 100)
+        sample["YearMonth"] = pd.to_numeric(sample["YearMonth"], errors="coerce")
+        sample.dropna(subset=["YearMonth"], inplace=True)
+        years = sorted((sample["YearMonth"] // 100).astype(int).unique())
         countries = sorted(sample["Country"].dropna().unique())
         provinces = sorted(sample["Province"].dropna().unique())
         states = sorted(sample["State"].dropna().unique())
@@ -89,9 +91,12 @@ try:
         filtered_chunks = []
         for chunk in pd.read_csv(local_filename, chunksize=chunksize):
             chunk.rename(columns={k: v for k, v in rename_map.items() if k in chunk.columns}, inplace=True)
-            chunk["Year"] = chunk["YearMonth"] // 100
-            chunk["Month"] = chunk["YearMonth"] % 100
+            chunk["YearMonth"] = pd.to_numeric(chunk["YearMonth"], errors="coerce")
+            chunk.dropna(subset=["YearMonth"], inplace=True)
+            chunk["Year"] = (chunk["YearMonth"] // 100).astype(int)
+            chunk["Month"] = (chunk["YearMonth"] % 100).astype(int)
 
+            # Apply filters
             if selected_years:
                 chunk = chunk[chunk["Year"].isin(selected_years)]
             if selected_country != "All":
@@ -121,17 +126,14 @@ try:
     # ✅ Visualizations
     st.subheader("Visualizations")
 
-    # Yearly Trend
     yearly_trend = filtered_df.groupby("Year", as_index=False)["Value"].sum()
     fig_year = px.line(yearly_trend, x="Year", y="Value", title="Import Value by Year")
     st.plotly_chart(fig_year, width="stretch")
 
-    # Top Countries
     top_countries = filtered_df.groupby("Country", as_index=False)["Value"].sum().sort_values("Value", ascending=False).head(10)
     fig_countries = px.bar(top_countries, x="Country", y="Value", title="Top 10 Countries by Import Value")
     st.plotly_chart(fig_countries, width="stretch")
 
-    # Province Breakdown
     province_breakdown = filtered_df.groupby("Province", as_index=False)["Value"].sum().sort_values("Value", ascending=False)
     fig_province = px.bar(province_breakdown, x="Province", y="Value", title="Import Value by Province")
     st.plotly_chart(fig_province, width="stretch")
