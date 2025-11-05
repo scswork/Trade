@@ -34,7 +34,7 @@ try:
     local_filename = "df_imp_all.csv"
     data_dir = "data"
 
-    # ✅ Show spinner for download (non-blocking UI)
+    # ✅ Download dataset if not exists
     if not os.path.exists(local_filename):
         with st.spinner("Downloading dataset from Kaggle..."):
             os.makedirs(data_dir, exist_ok=True)
@@ -52,10 +52,23 @@ try:
                 if file.endswith(".csv"):
                     os.rename(os.path.join(data_dir, file), local_filename)
 
+    # ✅ Column rename map for bilingual headers
+    rename_map = {
+        "HS10": "HS10",
+        "Country/Pays": "Country",
+        "Province": "Province",
+        "State/État": "State",
+        "Unit of Measure/Unité de Mesure": "UoM",
+        "YearMonth/AnnéeMois": "YearMonth",
+        "Value/Valeur": "Value",
+        "Quantity/Quantité": "Quantity"
+    }
+
     # ✅ Dynamic Filters
     @st.cache_data
     def load_unique_values():
         sample = pd.read_csv(local_filename, nrows=50000)
+        sample.rename(columns={k: v for k, v in rename_map.items() if k in sample.columns}, inplace=True)
         years = sorted(sample["YearMonth"] // 100)
         countries = sorted(sample["Country"].dropna().unique())
         provinces = sorted(sample["Province"].dropna().unique())
@@ -75,6 +88,7 @@ try:
     def load_filtered_data(selected_years, selected_country, selected_province, selected_state):
         filtered_chunks = []
         for chunk in pd.read_csv(local_filename, chunksize=chunksize):
+            chunk.rename(columns={k: v for k, v in rename_map.items() if k in chunk.columns}, inplace=True)
             chunk["Year"] = chunk["YearMonth"] // 100
             chunk["Month"] = chunk["YearMonth"] % 100
 
@@ -110,17 +124,17 @@ try:
     # Yearly Trend
     yearly_trend = filtered_df.groupby("Year", as_index=False)["Value"].sum()
     fig_year = px.line(yearly_trend, x="Year", y="Value", title="Import Value by Year")
-    st.plotly_chart(fig_year, use_container_width=True)
+    st.plotly_chart(fig_year, width="stretch")
 
     # Top Countries
     top_countries = filtered_df.groupby("Country", as_index=False)["Value"].sum().sort_values("Value", ascending=False).head(10)
     fig_countries = px.bar(top_countries, x="Country", y="Value", title="Top 10 Countries by Import Value")
-    st.plotly_chart(fig_countries, use_container_width=True)
+    st.plotly_chart(fig_countries, width="stretch")
 
     # Province Breakdown
     province_breakdown = filtered_df.groupby("Province", as_index=False)["Value"].sum().sort_values("Value", ascending=False)
     fig_province = px.bar(province_breakdown, x="Province", y="Value", title="Import Value by Province")
-    st.plotly_chart(fig_province, use_container_width=True)
+    st.plotly_chart(fig_province, width="stretch")
 
     # ✅ Data Preview
     st.subheader("Filtered Data Preview")
