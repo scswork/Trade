@@ -8,36 +8,7 @@ from difflib import get_close_matches
 st.set_page_config(layout="wide")
 st.title("Trade Data Explorer")
 
-# ✅ Kaggle credentials
-try:
-    os.environ['KAGGLE_USERNAME'] = st.secrets["KAGGLE_USERNAME"]
-    os.environ['KAGGLE_KEY'] = st.secrets["KAGGLE_KEY"]
-except KeyError:
-    st.error("Missing Kaggle credentials.")
-    st.stop()
-
-# ✅ Dataset Info
-dataset_slug = "shevaserrattan/can-sut20232024"
-local_filename = "df_imp_all.csv"
-data_dir = "data"
-
-# ✅ Download dataset if not exists
-if not os.path.exists(local_filename):
-    with st.spinner("Downloading dataset from Kaggle..."):
-        os.makedirs(data_dir, exist_ok=True)
-        result = subprocess.run([
-            "kaggle", "datasets", "download",
-            "-d", dataset_slug,
-            "--unzip", "-p", data_dir
-        ], capture_output=True, text=True)
-        if result.returncode != 0:
-            st.error(f"Download failed: {result.stderr}")
-            st.stop()
-        for file in os.listdir(data_dir):
-            if file.endswith(".csv"):
-                os.rename(os.path.join(data_dir, file), local_filename)
-
-# ✅ Sidebar filters (static inputs for speed)
+# ✅ Sidebar filters
 st.sidebar.header("Filters")
 selected_years = st.sidebar.text_input("Year(s) (comma-separated):")
 selected_country = st.sidebar.text_input("Country:")
@@ -46,7 +17,12 @@ selected_state = st.sidebar.text_input("State:")
 selected_hs10 = st.sidebar.text_input("HS10 Code:")
 description_query = st.sidebar.text_input("Description (fuzzy match):")
 
-apply_filters = st.sidebar.button("Apply Filters")
+load_data = st.sidebar.button("Load & Apply Filters")
+
+# ✅ Dataset Info
+dataset_slug = "shevaserrattan/can-sut20232024"
+local_filename = "df_imp_all.csv"
+data_dir = "data"
 
 # ✅ Cache full dataset
 @st.cache_data
@@ -69,8 +45,24 @@ def load_full_data():
     df["Year"] = (df["YearMonth"] // 100).astype(int)
     return df
 
-if apply_filters:
-    with st.spinner("Applying filters..."):
+if load_data:
+    # ✅ Download dataset if not exists
+    if not os.path.exists(local_filename):
+        with st.spinner("Downloading dataset from Kaggle..."):
+            os.makedirs(data_dir, exist_ok=True)
+            result = subprocess.run([
+                "kaggle", "datasets", "download",
+                "-d", dataset_slug,
+                "--unzip", "-p", data_dir
+            ], capture_output=True, text=True)
+            if result.returncode != 0:
+                st.error(f"Download failed: {result.stderr}")
+                st.stop()
+            for file in os.listdir(data_dir):
+                if file.endswith(".csv"):
+                    os.rename(os.path.join(data_dir, file), local_filename)
+
+    with st.spinner("Loading and filtering data..."):
         df = load_full_data()
 
         # ✅ Apply filters
@@ -125,4 +117,4 @@ if apply_filters:
             mime="text/csv"
         )
 else:
-    st.info("Enter filters and click **Apply Filters** to view results.")
+    st.info("Click **Load & Apply Filters** to start. No heavy processing until you click.")
