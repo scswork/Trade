@@ -2,17 +2,22 @@ import streamlit as st
 import pandas as pd
 import os
 import subprocess
+import plotly.express as px
 
 # ✅ Page Config
 st.set_page_config(layout="wide")
 st.title("Trade Data Explorer")
 
 # ✅ Kaggle Credentials
-os.environ['KAGGLE_USERNAME'] = st.secrets["KAGGLE_USERNAME"]
-os.environ['KAGGLE_KEY'] = st.secrets["KAGGLE_KEY"]
+try:
+    os.environ['KAGGLE_USERNAME'] = st.secrets["KAGGLE_USERNAME"]
+    os.environ['KAGGLE_KEY'] = st.secrets["KAGGLE_KEY"]
+except KeyError:
+    st.error("Missing Kaggle credentials in Streamlit secrets.")
+    st.stop()
 
-# ✅ Kaggle Dataset Info
-dataset_slug = "shevaserrattan/can-sut20232024"  # Replace with your Kaggle dataset slug
+# ✅ Dataset Info
+dataset_slug = "shevaserrattan/can-sut20232024"
 local_filename = "df_imp_all.csv"
 data_dir = "data"
 
@@ -30,80 +35,82 @@ if not os.path.exists(local_filename):
         st.error(f"Download failed: {result.stderr}")
         st.stop()
 
-    # Find CSV file and rename
     for file in os.listdir(data_dir):
         if file.endswith(".csv"):
             os.rename(os.path.join(data_dir, file), local_filename)
 
 # ✅ Sidebar Filters
 st.sidebar.header("Filters")
-selected_years = st.sidebar.multiselect("Select Year(s):", [])
-selected_country = st.sidebar.text_input("Country filter (optional):")
-selected_province = st.sidebar.text_input("Province filter (optional):")
-selected_state = st.sidebar.text_input("State filter (optional):")
 
-# ✅ Chunked Loading
+@st.cache_data
+def load_unique_values():
+    sample = pd.read_csv(local_filename, nrows=50000)
+    years = sorted(sample["YearMonth"] // 100)
+    countries = sorted(sample["Country"].dropna().unique())
+    provinces = sorted(sample["Province"].dropna().unique())
+    states = sorted(sample["State"].dropna().unique())
+    return years, countries, provinces, states
+
+years, countries, provinces, states = load_unique_values()
+
+selected_years = st.sidebar.multiselect("Select Year(s):", years)
+selected_country = st.sidebar.selectbox("Country:", ["All"] + countries)
+selected_province = st.sidebar.selectbox("Province:", ["All"] + provinces)
+selected_state = st.sidebar.selectbox("State:", ["All"] + states)
+
 chunksize = 100000
-filtered_chunks = []
 
-st.info("Loading data in chunks...")
-try:
+@st.cache_data
+def load_filtered_data(selected_years, selected_country, selected_province, selected_state):
+    filtered_chunks = []
     for chunk in pd.read_csv(local_filename, chunksize=chunksize):
-        rename_map = {
-            "HS10": "HS10",
-            "Country/Pays": "Country",
-            "Province": "Province",
-            "State/État": "State",
-            "Unit of Measure/Unité de Mesure": "UoM",
-            "YearMonth/AnnéeMois": "YearMonth",
-            "Value/Valeur": "Value",
-            "Quantity/Quantité": "Quantity"
-        }
-        chunk = chunk.rename(columns={k: v for k, v in rename_map.items() if k in chunk.columns})
+        chunk["Year"] = chunk["YearMonth"] // 100
+        chunk["Month"] = chunk["YearMonth"] % 100
 
-        if "YearMonth" in chunk.columns:
-            chunk["Year"] = chunk["YearMonth"] // 100
-            chunk["Month"] = chunk["YearMonth"] % 100
-            chunk["MonthName"] = pd.to_datetime(chunk["Month"], format="%m").dt.strftime("%b")
-        else:
-            continue
-
-        # Apply filters
         if selected_years:
             chunk = chunk[chunk["Year"].isin(selected_years)]
-        if selected_country:
+        if selected_country != "All":
             chunk = chunk[chunk["Country"] == selected_country]
-        if selected_province:
+        if selected_province != "All":
             chunk = chunk[chunk["Province"] == selected_province]
-        if selected_state:
+        if selected_state != "All":
             chunk = chunk[chunk["State"] == selected_state]
 
         if not chunk.empty:
             filtered_chunks.append(chunk)
 
-    if filtered_chunks:
-        filtered_df = pd.concat(filtered_chunks)
-        st.success(f"Loaded {len(filtered_df)} rows after filtering.")
+    return pd.concat(filtered_chunks) if filtered_chunks else pd.DataFrame()
 
-        # Summary stats
-        st.subheader("Summary Statistics")
-        st.write(f"Total Records: {len(filtered_df)}")
-        st.write(f"Total Import Value: {filtered_df['Value'].sum():,.2f}")
-        st.write(f"Total Quantity: {filtered_df['Quantity'].sum():,.2f}")
+filtered_df = load_filtered_data(selected_years, selected_country, selected_province, selected_state)
 
-        # Top countries by import value
-        st.subheader("Top 10 Countries by Import Value")
-        top_countries = filtered_df.groupby("Country", as_index=False)["Value"].sum()
-        top_countries = top_countries.sort_values("Value", ascending=False).head(10)
-        st.dataframe(top_countries)
-
-        # Show filtered data
-        st.subheader("Filtered Data Preview")
-        st.dataframe(filtered_df.head(100))
-    else:
-        st.warning("No data matches your filters.")
-
-except Exception as e:
-    st.error(f"Failed to load data: {e}")
+if filtered_df.empty:
+    st.warning("No data matches your filters.")
     st.stop()
 
+# ✅ Summary Stats
+st.subheader("Summary Statistics")
+st.write(f"Total Records: {len(filtered_df):,}")
+st.write(f"Total Import Value: {filtered_df['Value'].sum():,.2f}")
+st.write(f"Total Quantity: {filtered_df['Quantity'].sum():,.2f}")
+
+# ✅ Visualizations
+st.subheader("Visualizations")
+
+# Yearly Trend
+yearly_trend = filtered_df.groupby("Year", as_index=False)["Value"].sum()
+fig_year = px.line(yearly_trend, x="Year", y="Value", title="Import Value by Year")
+st.plotly_chart(fig_year, use_container_width=True)
+
+# Top Countries
+top_countries = filtered_df.groupby("Country", as_index=False)["Value"].sum().sort_values("Value", ascending=False).head(10)
+fig_countries = px.bar(top_countries, x="Country", y="Value", title="Top 10 Countries by Import Value")
+st.plotly_chart(fig_countries, use_container_width=True)
+
+# Province Breakdown
+province_breakdown = filtered_df.groupby("Province", as_index=False)["Value"].sum().sort_values("Value", ascending=False)
+fig_province = px.bar(province_breakdown, x="Province", y="Value", title="Import Value by Province")
+st.plotly_chart(fig_province, use_container_width=True)
+
+# ✅ Data Preview
+st.subheader("Filtered Data Preview")
+st.dataframe(filtered_df.head(100))
