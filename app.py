@@ -8,7 +8,11 @@ import plotly.express as px
 st.set_page_config(layout="wide")
 st.title("Trade Data Explorer")
 
-# ✅ Kaggle Credentials
+# ✅ Sidebar first (UI loads immediately)
+st.sidebar.header("Filters")
+st.info("Initializing app...")
+
+# ✅ Kaggle Credentials Check
 try:
     os.environ['KAGGLE_USERNAME'] = st.secrets["KAGGLE_USERNAME"]
     os.environ['KAGGLE_KEY'] = st.secrets["KAGGLE_KEY"]
@@ -21,27 +25,25 @@ dataset_slug = "shevaserrattan/can-sut20232024"
 local_filename = "df_imp_all.csv"
 data_dir = "data"
 
-# ✅ Download dataset if not exists
+# ✅ Show spinner for download (non-blocking UI)
 if not os.path.exists(local_filename):
-    st.info("Downloading dataset from Kaggle...")
-    os.makedirs(data_dir, exist_ok=True)
-    result = subprocess.run([
-        "kaggle", "datasets", "download",
-        "-d", dataset_slug,
-        "--unzip", "-p", data_dir
-    ], capture_output=True, text=True)
+    with st.spinner("Downloading dataset from Kaggle..."):
+        os.makedirs(data_dir, exist_ok=True)
+        result = subprocess.run([
+            "kaggle", "datasets", "download",
+            "-d", dataset_slug,
+            "--unzip", "-p", data_dir
+        ], capture_output=True, text=True)
 
-    if result.returncode != 0:
-        st.error(f"Download failed: {result.stderr}")
-        st.stop()
+        if result.returncode != 0:
+            st.error(f"Download failed: {result.stderr}")
+            st.stop()
 
-    for file in os.listdir(data_dir):
-        if file.endswith(".csv"):
-            os.rename(os.path.join(data_dir, file), local_filename)
+        for file in os.listdir(data_dir):
+            if file.endswith(".csv"):
+                os.rename(os.path.join(data_dir, file), local_filename)
 
-# ✅ Sidebar Filters
-st.sidebar.header("Filters")
-
+# ✅ Dynamic Filters
 @st.cache_data
 def load_unique_values():
     sample = pd.read_csv(local_filename, nrows=50000)
