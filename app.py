@@ -37,37 +37,13 @@ if not os.path.exists(local_filename):
             if file.endswith(".csv"):
                 os.rename(os.path.join(data_dir, file), local_filename)
 
-# ✅ Column rename map
-rename_map = {
-    "HS10": "HS10",
-    "Description": "Description",
-    "Country/Pays": "Country",
-    "Province": "Province",
-    "State/État": "State",
-    "Unit of Measure/Unité de Mesure": "UoM",
-    "YearMonth/AnnéeMois": "YearMonth",
-    "Value/Valeur": "Value",
-    "Quantity/Quantité": "Quantity"
-}
-
-# ✅ Load sample for filters
-sample = pd.read_csv(local_filename, nrows=50000)
-sample.rename(columns={k: v for k, v in rename_map.items() if k in sample.columns}, inplace=True)
-sample["YearMonth"] = pd.to_numeric(sample.get("YearMonth"), errors="coerce")
-sample.dropna(subset=["YearMonth"], inplace=True)
-
-years = sorted((sample["YearMonth"] // 100).astype(int).unique())
-countries = sorted(sample.get("Country", pd.Series()).dropna().unique())
-provinces = sorted(sample.get("Province", pd.Series()).dropna().unique())
-states = sorted(sample.get("State", pd.Series()).dropna().unique())
-
-# ✅ Sidebar filters
+# ✅ Sidebar filters (static inputs for speed)
 st.sidebar.header("Filters")
-selected_years = st.sidebar.multiselect("Select Year(s):", years)
-selected_country = st.sidebar.selectbox("Country:", ["All"] + countries)
-selected_province = st.sidebar.selectbox("Province:", ["All"] + provinces)
-selected_state = st.sidebar.selectbox("State:", ["All"] + states)
-selected_hs10 = st.sidebar.text_input("HS10 Code (optional):")
+selected_years = st.sidebar.text_input("Year(s) (comma-separated):")
+selected_country = st.sidebar.text_input("Country:")
+selected_province = st.sidebar.text_input("Province:")
+selected_state = st.sidebar.text_input("State:")
+selected_hs10 = st.sidebar.text_input("HS10 Code:")
 description_query = st.sidebar.text_input("Description (fuzzy match):")
 
 apply_filters = st.sidebar.button("Apply Filters")
@@ -76,6 +52,17 @@ apply_filters = st.sidebar.button("Apply Filters")
 @st.cache_data
 def load_full_data():
     df = pd.read_csv(local_filename)
+    rename_map = {
+        "HS10": "HS10",
+        "Description": "Description",
+        "Country/Pays": "Country",
+        "Province": "Province",
+        "State/État": "State",
+        "Unit of Measure/Unité de Mesure": "UoM",
+        "YearMonth/AnnéeMois": "YearMonth",
+        "Value/Valeur": "Value",
+        "Quantity/Quantité": "Quantity"
+    }
     df.rename(columns={k: v for k, v in rename_map.items() if k in df.columns}, inplace=True)
     df["YearMonth"] = pd.to_numeric(df.get("YearMonth"), errors="coerce")
     df.dropna(subset=["YearMonth"], inplace=True)
@@ -88,12 +75,16 @@ if apply_filters:
 
         # ✅ Apply filters
         if selected_years:
-            df = df[df["Year"].isin(selected_years)]
-        if selected_country != "All":
+            try:
+                years_list = [int(y.strip()) for y in selected_years.split(",") if y.strip().isdigit()]
+                df = df[df["Year"].isin(years_list)]
+            except:
+                st.warning("Invalid year format.")
+        if selected_country:
             df = df[df.get("Country", "") == selected_country]
-        if selected_province != "All":
+        if selected_province:
             df = df[df.get("Province", "") == selected_province]
-        if selected_state != "All":
+        if selected_state:
             df = df[df.get("State", "") == selected_state]
         if selected_hs10:
             df = df[df.get("HS10", "").astype(str).str.contains(selected_hs10, case=False)]
@@ -134,4 +125,4 @@ if apply_filters:
             mime="text/csv"
         )
 else:
-    st.info("Select filters and click **Apply Filters** to view results.")
+    st.info("Enter filters and click **Apply Filters** to view results.")
