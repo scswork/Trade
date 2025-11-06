@@ -1,3 +1,5 @@
+st.set_option('client.showErrorDetails', True)
+
 import streamlit as st
 import pandas as pd
 import requests
@@ -106,3 +108,4 @@ if load_data:
         )
 else:
     st.info("👈 Click **Load & Apply Filters** to begin.")
+
