@@ -1,11 +1,11 @@
-st.set_option('client.showErrorDetails', True)
-
 import streamlit as st
 import pandas as pd
 import requests
 import io
 import plotly.express as px
 from difflib import get_close_matches
+
+st.set_option('client.showErrorDetails', True)
 
 # -------------------- Page Setup --------------------
 st.set_page_config(page_title="Trade Data Explorer", layout="wide")
@@ -108,4 +108,5 @@ if load_data:
         )
 else:
     st.info("👈 Click **Load & Apply Filters** to begin.")
+
 
