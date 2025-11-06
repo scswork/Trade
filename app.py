@@ -13,12 +13,12 @@ st.title("🇨🇦 Trade Data Explorer")
 
 # -------------------- Sidebar Filters --------------------
 st.sidebar.header("Filters")
-selected_years = st.sidebar.text_input("Year(s) (comma-separated):")
-selected_country = st.sidebar.text_input("Country:")
-selected_province = st.sidebar.text_input("Province:")
-selected_state = st.sidebar.text_input("State:")
-selected_hs10 = st.sidebar.text_input("HS10 Code:")
-description_query = st.sidebar.text_input("Description (fuzzy match):")
+selected_years = st.sidebar.text_input("Year(s) (comma-separated):", help="e.g. 2023, 2024")
+selected_country = st.sidebar.text_input("Country:", help="Exact match required")
+selected_province = st.sidebar.text_input("Province:", help="Exact match required")
+selected_state = st.sidebar.text_input("State:", help="Exact match required")
+selected_hs10 = st.sidebar.text_input("HS10 Code:", help="Partial match allowed")
+description_query = st.sidebar.text_input("Description (fuzzy match):", help="Fuzzy match on product description")
 load_data = st.sidebar.button("Load & Apply Filters")
 
 # -------------------- GitHub Parquet URLs --------------------
@@ -36,17 +36,34 @@ def load_parquet_from_github(urls):
     for url in urls:
         response = requests.get(url)
         if response.status_code == 200:
-            buffer = io.BytesIO(response.content)
-            df = pd.read_parquet(buffer)
-            dfs.append(df)
+            try:
+                buffer = io.BytesIO(response.content)
+                df = pd.read_parquet(buffer)
+                dfs.append(df)
+            except Exception as e:
+                st.warning(f"⚠️ Error reading parquet file: {url} — {e}")
         else:
             st.warning(f"⚠️ Failed to load: {url}")
     return pd.concat(dfs, ignore_index=True)
+
+# -------------------- Excel Export Helper --------------------
+def to_excel(df):
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        df.to_excel(writer, index=False, sheet_name='TradeData')
+    return output.getvalue()
 
 # -------------------- Main Logic --------------------
 if load_data:
     with st.spinner("🔄 Loading and filtering data..."):
         df = load_parquet_from_github(parquet_urls)
+
+        # Validate expected columns
+        expected_columns = ["Year", "Country", "Province", "State", "HS10", "Description", "Value", "Quantity"]
+        missing = [col for col in expected_columns if col not in df.columns]
+        if missing:
+            st.error(f"🚫 Missing expected columns: {', '.join(missing)}")
+            st.stop()
 
         # Apply filters
         if selected_years:
@@ -56,18 +73,19 @@ if load_data:
             except Exception:
                 st.warning("⚠️ Invalid year format. Use comma-separated numbers, e.g. 2023, 2024.")
 
-        if selected_country:
+        if selected_country and "Country" in df.columns:
             df = df[df["Country"] == selected_country]
-        if selected_province:
+        if selected_province and "Province" in df.columns:
             df = df[df["Province"] == selected_province]
-        if selected_state:
+        if selected_state and "State" in df.columns:
             df = df[df["State"] == selected_state]
-        if selected_hs10:
+        if selected_hs10 and "HS10" in df.columns:
             df = df[df["HS10"].astype(str).str.contains(selected_hs10, case=False)]
 
         if description_query and "Description" in df.columns:
             matches = get_close_matches(description_query, df["Description"].dropna().unique(), n=10, cutoff=0.6)
             if matches:
+                st.write("🔍 Fuzzy matched descriptions:", matches)
                 df = df[df["Description"].isin(matches)]
 
         if df.empty:
@@ -106,7 +124,12 @@ if load_data:
             file_name="filtered_trade_data.csv",
             mime="text/csv"
         )
+
+        st.download_button(
+            label="⬇️ Download Filtered Data as Excel",
+            data=to_excel(df),
+            file_name="filtered_trade_data.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
 else:
     st.info("👈 Click **Load & Apply Filters** to begin.")
-
-
