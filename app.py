@@ -105,28 +105,12 @@ else:
             col2.metric("Total Import Value", f"${df_filtered['Value'].sum():,.2f}")
             col3.metric("Total Quantity", f"{df_filtered['Quantity'].sum():,.2f}")
 
-            # -------------------- Aggregate HHI (filtered dataset) --------------------
-            hhi_calc = df_filtered.groupby(['HS10','SUPC','Country'], as_index=False)['Value'].sum()
-            total_per_product = hhi_calc.groupby(['HS10','SUPC'], as_index=False)['Value'].sum().rename(columns={'Value':'total_value'})
-            hhi_calc = hhi_calc.merge(total_per_product, on=['HS10','SUPC'])
-            hhi_calc['share_sq'] = (hhi_calc['Value'] / hhi_calc['total_value'])**2
-            hhi_table = hhi_calc.groupby(['HS10','SUPC'], as_index=False)['share_sq'].sum().rename(columns={'share_sq':'HHI'})
-            hhi_table = hhi_table.merge(
-                df_filtered[['HS10','SUPC','Description','SUPC_Desc']].drop_duplicates(),
-                on=['HS10','SUPC'], how='left'
-            )
+            # -------------------- Aggregate HHI --------------------
+            agg_hhi_df = df_filtered.groupby('Country', as_index=False)['Value'].sum()
+            agg_hhi_df['Share'] = agg_hhi_df['Value'] / agg_hhi_df['Value'].sum()
+            aggregate_hhi = (agg_hhi_df['Share'] ** 2).sum()
 
-            # Compute aggregate HHI over all filtered data
-            agg_hhi = (
-                df_filtered.groupby('Country', as_index=False)['Value'].sum()
-            )
-            agg_hhi['share_sq'] = (agg_hhi['Value'] / agg_hhi['Value'].sum())**2
-            agg_hhi = agg_hhi['share_sq'].sum()
-
-            st.subheader("🏆 Top 100 Products by HHI (filtered data)")
-            st.dataframe(hhi_table.sort_values('HHI', ascending=False).head(100))
-
-            # -------------------- Single-Product Summary (with Aggregate HHI) --------------------
+            # -------------------- Single-Product Summary --------------------
             st.subheader("🔹 Selected Product Summary (with Aggregate HHI)")
 
             product_info = df_filtered.copy()
@@ -144,25 +128,23 @@ Description: {prod.get('Description','N/A')}
 SUPC: {prod['SUPC']}
 SUPC Desc: {prod.get('SUPC_Desc','N/A')}
 PCI (2023): {pci_value}
-Aggregate HHI (filtered data): {agg_hhi:.4f}
+Aggregate HHI (filtered data): {aggregate_hhi:.4f}
 """
                 st.text(summary_text)
 
-                # Top 10 countries by Value for this product
+                # -------------------- Top 10 Countries Table --------------------
                 top_countries = (
                     df_filtered[(df_filtered['HS10']==prod['HS10']) & (df_filtered['SUPC']==prod['SUPC'])]
-                    .groupby('Country', as_index=False)['Value']
-                    .sum()
-                    .sort_values('Value', ascending=False)
-                    .head(10)
+                    .groupby(['Year','Country','UoM'], as_index=False)
+                    .agg(
+                        CountryValue=('Value','sum'),
+                        CountryQuantity=('Quantity','sum')
+                    )
                 )
-                st.subheader("🌎 Top 10 Countries by Import Value")
-                st.bar_chart(top_countries.set_index('Country')['Value'])
-
-            # -------------------- Visualizations --------------------
-            st.subheader("📈 Import Value by Year")
-            yearly_trend = df_filtered.groupby('Year', as_index=False)['Value'].sum()
-            st.line_chart(yearly_trend.set_index('Year')['Value'])
+                top_countries['SharePercent'] = round(top_countries['CountryValue'] / top_countries['CountryValue'].sum() * 100, 2)
+                top_countries = top_countries.sort_values('CountryValue', ascending=False).head(10)
+                st.subheader("🌎 Top 10 Countries by Import Share")
+                st.dataframe(top_countries[['Year','Country','CountryValue','CountryQuantity','UoM','SharePercent']])
 
             # -------------------- Data Preview --------------------
             st.subheader("🔍 Filtered Data Preview")
