@@ -105,15 +105,7 @@ else:
             col2.metric("Total Import Value", f"${df_filtered['Value'].sum():,.2f}")
             col3.metric("Total Quantity", f"{df_filtered['Quantity'].sum():,.2f}")
 
-            # -------------------- Aggregate HHI (filtered data) --------------------
-            agg_hhi_df = df_filtered.groupby('Country', as_index=False)['Value'].sum()
-            total_value = agg_hhi_df['Value'].sum()
-            agg_hhi_df['share'] = agg_hhi_df['Value'] / total_value
-            agg_hhi = (agg_hhi_df['share']**2).sum()
-            st.subheader("🔹 Aggregate HHI (filtered data)")
-            st.write(f"Aggregate HHI across all filtered imports: **{agg_hhi:.4f}**")
-
-            # -------------------- Top 100 Products by HHI --------------------
+            # -------------------- Aggregate HHI (filtered dataset) --------------------
             hhi_calc = df_filtered.groupby(['HS10','SUPC','Country'], as_index=False)['Value'].sum()
             total_per_product = hhi_calc.groupby(['HS10','SUPC'], as_index=False)['Value'].sum().rename(columns={'Value':'total_value'})
             hhi_calc = hhi_calc.merge(total_per_product, on=['HS10','SUPC'])
@@ -123,19 +115,28 @@ else:
                 df_filtered[['HS10','SUPC','Description','SUPC_Desc']].drop_duplicates(),
                 on=['HS10','SUPC'], how='left'
             )
+
+            # Compute aggregate HHI over all filtered data
+            agg_hhi = (
+                df_filtered.groupby('Country', as_index=False)['Value'].sum()
+            )
+            agg_hhi['share_sq'] = (agg_hhi['Value'] / agg_hhi['Value'].sum())**2
+            agg_hhi = agg_hhi['share_sq'].sum()
+
             st.subheader("🏆 Top 100 Products by HHI (filtered data)")
             st.dataframe(hhi_table.sort_values('HHI', ascending=False).head(100))
 
-            # -------------------- Single-Product HHI/PCI Summary --------------------
-            st.subheader("🔹 Selected Product HHI/PCI Summary")
-            product_hhi = hhi_table.copy()
-            if hs_input:
-                product_hhi = product_hhi[product_hhi['HS10'].astype(str).str.contains(hs_input, case=False)]
-            if supc_input:
-                product_hhi = product_hhi[product_hhi['SUPC'].astype(str).str.contains(supc_input, case=False)]
+            # -------------------- Single-Product Summary (with Aggregate HHI) --------------------
+            st.subheader("🔹 Selected Product Summary (with Aggregate HHI)")
 
-            if not product_hhi.empty:
-                prod = product_hhi.iloc[0]  # first match
+            product_info = df_filtered.copy()
+            if hs_input:
+                product_info = product_info[product_info['HS10'].astype(str).str.contains(hs_input, case=False)]
+            if supc_input:
+                product_info = product_info[product_info['SUPC'].astype(str).str.contains(supc_input, case=False)]
+
+            if not product_info.empty:
+                prod = product_info.iloc[0]  # first match
                 pci_value = prod.get('PCI', 'Not available')
                 summary_text = f"""
 HS10: {prod['HS10']}
@@ -143,7 +144,7 @@ Description: {prod.get('Description','N/A')}
 SUPC: {prod['SUPC']}
 SUPC Desc: {prod.get('SUPC_Desc','N/A')}
 PCI (2023): {pci_value}
-Product HHI (filtered data): {prod['HHI']:.4f}
+Aggregate HHI (filtered data): {agg_hhi:.4f}
 """
                 st.text(summary_text)
 
