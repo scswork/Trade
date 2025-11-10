@@ -121,18 +121,33 @@ else:
             st.subheader("🏆 Top 100 Products by HHI")
             st.dataframe(hhi_table)
 
-            # -------------------- Single Product HHI --------------------
-            st.subheader("🔹 Selected Product HHI Details")
+            # -------------------- Single Product HHI/PCI Display --------------------
+            st.subheader("🔹 Selected Product HHI/PCI Summary")
             if hs_input or supc_input:
                 product_hhi = hhi_table.copy()
                 if hs_input:
                     product_hhi = product_hhi[product_hhi['HS10'].astype(str).str.contains(hs_input, case=False)]
                 if supc_input:
                     product_hhi = product_hhi[product_hhi['SUPC'].astype(str).str.contains(supc_input, case=False)]
-                if not product_hhi.empty:
-                    st.write(product_hhi)
 
-                    # Top 10 countries by import value for this product
+                if not product_hhi.empty:
+                    prod = product_hhi.iloc[0]
+                    pci_value = prod.get('PCI', 'Not available')  # if PCI column exists
+
+                    summary_text = f"""
+Selected Year(s): {', '.join(map(str, selected_years))}
+PCI (2023): {pci_value}
+HS10 (example): {prod['HS10']}
+Description (example): {prod.get('Description','N/A')}
+SUPC: {prod['SUPC']}
+SUPC Desc: {prod.get('SUPC_Desc','N/A')}
+
+--- Year: {selected_years[0]} ---
+Aggregate HHI: {prod['HHI']:.4f}
+"""
+                    st.text(summary_text)
+
+                    # -------------------- Top 10 Countries by Import Value --------------------
                     top_countries = df_filtered.groupby('Country')['Value'].sum().reset_index().sort_values('Value', ascending=False).head(10)
                     st.subheader("🌎 Top 10 Countries by Import Value")
                     st.bar_chart(top_countries.set_index('Country')['Value'])
