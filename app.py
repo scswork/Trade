@@ -1,23 +1,22 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 import requests
 import io
-import plotly.express as px
 from difflib import get_close_matches
-import traceback
+import plotly.express as px
 
-st.set_page_config(page_title="Trade Data Explorer", layout="wide")
-st.set_option('client.showErrorDetails', True)
-st.title("🇨🇦 Trade Data Explorer")
+st.set_page_config(page_title="Trade KPIs Explorer", layout="wide")
+st.title("🇨🇦 Trade KPIs Explorer")
 
 # -------------------- Load Parquet --------------------
 @st.cache_data(show_spinner=False)
-def load_parquet_from_github(url):
+def load_parquet(url):
     try:
         response = requests.get(url, allow_redirects=True, timeout=60)
         response.raise_for_status()
         buffer = io.BytesIO(response.content)
-        df = pd.read_parquet(buffer, engine="pyarrow", columns=["Year","Country","Province","State","HS10","Description","Value","Quantity"])
+        df = pd.read_parquet(buffer, engine="pyarrow")
         return df
     except Exception as e:
         st.error(f"Failed to load dataset: {e}")
@@ -30,120 +29,123 @@ def to_excel(df):
         df.to_excel(writer, index=False, sheet_name='TradeData')
     return output.getvalue()
 
+# -------------------- Sidebar: Dataset Selection --------------------
+st.sidebar.header("Select Half-Year Dataset")
+parquet_urls = {
+    "2023_H1": "https://raw.githubusercontent.com/scswork/Trade/main/trade_data_2023_H1.parquet",
+    "2023_H2": "https://raw.githubusercontent.com/scswork/Trade/main/trade_data_2023_H2.parquet",
+    "2024_H1": "https://raw.githubusercontent.com/scswork/Trade/main/trade_data_2024_H1.parquet",
+    "2024_H2": "https://raw.githubusercontent.com/scswork/Trade/main/trade_data_2024_H2.parquet"
+}
+selected_file = st.sidebar.selectbox("Half-Year:", list(parquet_urls.keys()), index=3)
+
+if st.sidebar.button("Load Dataset"):
+    st.session_state["df_loaded"] = load_parquet(parquet_urls[selected_file])
+    st.success(f"✅ Loaded {len(st.session_state['df_loaded']):,} rows from {selected_file}")
+
 # -------------------- Main App --------------------
-def main():
-    try:
-        st.sidebar.header("Select Dataset (Half-Year)")
-        parquet_urls = {
-            "2023_H1": "https://raw.githubusercontent.com/scswork/Trade/main/trade_data_2023_H1.parquet",
-            "2023_H2": "https://raw.githubusercontent.com/scswork/Trade/main/trade_data_2023_H2.parquet",
-            "2024_H1": "https://raw.githubusercontent.com/scswork/Trade/main/trade_data_2024_H1.parquet",
-            "2024_H2": "https://raw.githubusercontent.com/scswork/Trade/main/trade_data_2024_H2.parquet"
-        }
+df_loaded = st.session_state.get("df_loaded", pd.DataFrame())
+if df_loaded.empty:
+    st.info("👈 Load a dataset first using the button above.")
+else:
+    st.sidebar.header("Filters")
 
-        selected_file = st.sidebar.selectbox("Half-Year:", list(parquet_urls.keys()), index=3)
+    # Filters
+    years = sorted(df_loaded["Year"].dropna().unique())
+    selected_years = st.sidebar.multiselect("Year(s):", years, default=years)
 
-        # -------------------- Buttons --------------------
-        if "df_loaded" not in st.session_state:
-            st.session_state["df_loaded"] = pd.DataFrame()
+    countries = sorted(df_loaded["Country"].dropna().unique())
+    selected_country = st.sidebar.multiselect("Country:", countries)
 
-        if st.sidebar.button("Load Dataset"):
-            st.session_state["df_loaded"] = load_parquet_from_github(parquet_urls[selected_file])
-            st.success(f"✅ Loaded {len(st.session_state['df_loaded']):,} rows from {selected_file}")
+    provinces = sorted(df_loaded["Province"].dropna().unique())
+    selected_province = st.sidebar.multiselect("Province:", provinces)
 
-        df_loaded = st.session_state["df_loaded"]
-        if df_loaded.empty:
-            st.info("👈 Load a dataset first using the button above.")
-            return
+    states = sorted(df_loaded["State"].dropna().unique())
+    selected_state = st.sidebar.multiselect("State:", states)
 
-        # -------------------- Filters --------------------
-        st.sidebar.header("Filters")
-        # Year
-        years = sorted(df_loaded["Year"].dropna().unique().tolist())
-        selected_years = st.sidebar.multiselect("Year(s):", years, default=years)
-        # Country
-        countries = sorted(df_loaded["Country"].dropna().unique().tolist())
-        selected_country = st.sidebar.multiselect("Country:", countries)
-        # Province
-        provinces = sorted(df_loaded["Province"].dropna().unique().tolist())
-        selected_province = st.sidebar.multiselect("Province:", provinces)
-        # State
-        states = sorted(df_loaded["State"].dropna().unique().tolist())
-        selected_state = st.sidebar.multiselect("State:", states)
-        # HS10 and Description
-        selected_hs10 = st.sidebar.text_input("HS10 Code:", help="Partial match allowed")
-        description_query = st.sidebar.text_input("Description (fuzzy match):", help="Fuzzy match on product description")
+    hs_input = st.sidebar.text_input("HS10 Code:")
+    supc_input = st.sidebar.text_input("SUPC Code:")
+    desc_input = st.sidebar.text_input("Product Description:")
 
-        if st.sidebar.button("Apply Filters"):
-            df_filtered = df_loaded.copy()
-            if selected_years:
-                df_filtered = df_filtered[df_filtered["Year"].isin(selected_years)]
-            if selected_country:
-                df_filtered = df_filtered[df_filtered["Country"].isin(selected_country)]
-            if selected_province:
-                df_filtered = df_filtered[df_filtered["Province"].isin(selected_province)]
-            if selected_state:
-                df_filtered = df_filtered[df_filtered["State"].isin(selected_state)]
-            if selected_hs10:
-                df_filtered = df_filtered[df_filtered["HS10"].astype(str).str.contains(selected_hs10, case=False)]
-            if description_query:
-                try:
-                    sample = df_filtered["Description"].dropna().unique().tolist()
-                    if len(sample) > 5000:
-                        sample = sample[:5000]
-                    matches = get_close_matches(description_query, sample, n=10, cutoff=0.6)
-                    if matches:
-                        st.write("🔍 Fuzzy matched descriptions:", matches)
-                        df_filtered = df_filtered[df_filtered["Description"].isin(matches)]
-                    else:
-                        st.warning("No close matches found.")
-                except Exception as e:
-                    st.warning(f"Fuzzy match failed: {e}")
+    if st.sidebar.button("Apply Filters"):
+        df_filtered = df_loaded.copy()
 
-            if df_filtered.empty:
-                st.warning("No data matches your filters.")
-                return
+        if selected_years:
+            df_filtered = df_filtered[df_filtered['Year'].isin(selected_years)]
+        if selected_country:
+            df_filtered = df_filtered[df_filtered['Country'].isin(selected_country)]
+        if selected_province:
+            df_filtered = df_filtered[df_filtered['Province'].isin(selected_province)]
+        if selected_state:
+            df_filtered = df_filtered[df_filtered['State'].isin(selected_state)]
+        if hs_input:
+            df_filtered = df_filtered[df_filtered['HS10'].astype(str).str.contains(hs_input, case=False)]
+        if supc_input:
+            df_filtered = df_filtered[df_filtered['SUPC'].astype(str).str.contains(supc_input, case=False)]
+        if desc_input:
+            try:
+                sample = df_filtered['Description'].dropna().unique().tolist()
+                if len(sample) > 5000:
+                    sample = sample[:5000]
+                matches = get_close_matches(desc_input, sample, n=10, cutoff=0.6)
+                if matches:
+                    st.write("🔍 Fuzzy matched descriptions:", matches)
+                    df_filtered = df_filtered[df_filtered['Description'].isin(matches)]
+                else:
+                    st.warning("No close matches found for description.")
+            except Exception as e:
+                st.warning(f"Fuzzy match failed: {e}")
 
-            # -------------------- Summary --------------------
-            st.subheader("📊 Summary Statistics")
+        if df_filtered.empty:
+            st.warning("No data matches your filters.")
+        else:
+            # -------------------- Summary Metrics --------------------
+            st.subheader("📊 Summary Metrics")
             col1, col2, col3 = st.columns(3)
             col1.metric("Total Records", f"{len(df_filtered):,}")
             col2.metric("Total Import Value", f"${df_filtered['Value'].sum():,.2f}")
             col3.metric("Total Quantity", f"{df_filtered['Quantity'].sum():,.2f}")
 
+            # -------------------- HHI Calculation --------------------
+            group_cols = ['HS10','SUPC','Province']
+            total_per_product = df_filtered.groupby(['HS10','SUPC'])['Value'].sum().reset_index().rename(columns={'Value':'total_value'})
+            hhi_calc = df_filtered.groupby(group_cols)['Value'].sum().reset_index()
+            hhi_calc = hhi_calc.merge(total_per_product, on=['HS10','SUPC'], how='left')
+            hhi_calc['share_sq'] = (hhi_calc['Value'] / hhi_calc['total_value']).fillna(0)**2
+            hhi_table = hhi_calc.groupby(['HS10','SUPC'], dropna=False)['share_sq'].sum().reset_index().rename(columns={'share_sq':'HHI'})
+
+            # Attach Description
+            hhi_table = hhi_table.merge(df_filtered[['HS10','SUPC','Description']].drop_duplicates(), on=['HS10','SUPC'], how='left')
+            hhi_table = hhi_table.sort_values('HHI', ascending=False).head(100)
+
+            st.subheader("🏆 Top 100 Products by HHI")
+            st.dataframe(hhi_table)
+
+            # -------------------- Single Product HHI --------------------
+            st.subheader("🔹 Selected Product HHI Details")
+            if hs_input or supc_input:
+                product_hhi = hhi_table.copy()
+                if hs_input:
+                    product_hhi = product_hhi[product_hhi['HS10'].astype(str).str.contains(hs_input, case=False)]
+                if supc_input:
+                    product_hhi = product_hhi[product_hhi['SUPC'].astype(str).str.contains(supc_input, case=False)]
+                if not product_hhi.empty:
+                    st.write(product_hhi)
+
+                    # Top 10 countries by import value for this product
+                    top_countries = df_filtered.groupby('Country')['Value'].sum().reset_index().sort_values('Value', ascending=False).head(10)
+                    st.subheader("🌎 Top 10 Countries by Import Value")
+                    st.bar_chart(top_countries.set_index('Country')['Value'])
+
             # -------------------- Visualizations --------------------
-            st.subheader("📈 Visualizations")
-            df_viz = df_filtered.head(10000)
+            st.subheader("📈 Import Value by Year")
+            yearly_trend = df_filtered.groupby('Year')['Value'].sum().reset_index()
+            st.line_chart(yearly_trend.set_index('Year')['Value'])
 
-            try:
-                yearly_trend = df_viz.groupby("Year", as_index=False)["Value"].sum()
-                st.plotly_chart(px.line(yearly_trend, x="Year", y="Value", title="Import Value by Year"), width="stretch")
-            except Exception as e:
-                st.warning(f"Chart error (yearly trend): {e}")
-
-            try:
-                top_countries = df_viz.groupby("Country", as_index=False)["Value"].sum().nlargest(10, "Value")
-                st.plotly_chart(px.bar(top_countries, x="Country", y="Value", title="Top 10 Countries"), width="stretch")
-            except Exception as e:
-                st.warning(f"Chart error (top countries): {e}")
-
-            try:
-                province_breakdown = df_viz.groupby("Province", as_index=False)["Value"].sum().sort_values("Value", ascending=False)
-                st.plotly_chart(px.bar(province_breakdown, x="Province", y="Value", title="Import Value by Province"), width="stretch")
-            except Exception as e:
-                st.warning(f"Chart error (province breakdown): {e}")
-
-            # -------------------- Preview --------------------
+            # -------------------- Data Preview --------------------
             st.subheader("🔍 Filtered Data Preview")
             st.dataframe(df_filtered.head(100))
 
             # -------------------- Downloads --------------------
             st.download_button("⬇️ Download CSV", df_filtered.to_csv(index=False), "filtered_trade_data.csv", "text/csv")
             st.download_button("⬇️ Download Excel", to_excel(df_filtered), "filtered_trade_data.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-
-    except Exception as e:
-        st.error("Unexpected error:")
-        st.text(traceback.format_exc())
-
-if __name__ == "__main__":
-    main()
