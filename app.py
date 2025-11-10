@@ -106,17 +106,34 @@ else:
             col2.metric("Total Import Value", f"${df_filtered['Value'].sum():,.2f}")
             col3.metric("Total Quantity", f"{df_filtered['Quantity'].sum():,.2f}")
 
-            # -------------------- HHI Calculation --------------------
-            group_cols = ['HS10','SUPC','Province']
-            total_per_product = df_filtered.groupby(['HS10','SUPC'])['Value'].sum().reset_index().rename(columns={'Value':'total_value'})
-            hhi_calc = df_filtered.groupby(group_cols)['Value'].sum().reset_index()
-            hhi_calc = hhi_calc.merge(total_per_product, on=['HS10','SUPC'], how='left')
-            hhi_calc['share_sq'] = (hhi_calc['Value'] / hhi_calc['total_value']).fillna(0)**2
-            hhi_table = hhi_calc.groupby(['HS10','SUPC'], dropna=False)['share_sq'].sum().reset_index().rename(columns={'share_sq':'HHI'})
-
+            # -------------------- Correct HHI Calculation --------------------
+            # Aggregate by Year, HS10, SUPC, Country
+            hhi_df = (
+                df_filtered.groupby(['Year','HS10','SUPC','Country'], as_index=False)['Value']
+                .sum()
+            )
+            # Total per Year-Product
+            total_per_product = (
+                hhi_df.groupby(['Year','HS10','SUPC'], as_index=False)['Value']
+                .sum()
+                .rename(columns={'Value':'total_value'})
+            )
+            # Merge totals and compute squared shares
+            hhi_df = hhi_df.merge(total_per_product, on=['Year','HS10','SUPC'])
+            hhi_df['share_sq'] = (hhi_df['Value'] / hhi_df['total_value'])**2
+            # Aggregate to HHI per Year-Product
+            hhi_table = (
+                hhi_df.groupby(['Year','HS10','SUPC'], as_index=False)['share_sq']
+                .sum()
+                .rename(columns={'share_sq':'HHI'})
+            )
             # Attach Description
-            hhi_table = hhi_table.merge(df_filtered[['HS10','SUPC','Description']].drop_duplicates(), on=['HS10','SUPC'], how='left')
-            hhi_table = hhi_table.sort_values('HHI', ascending=False).head(100)
+            hhi_table = hhi_table.merge(
+                df_filtered[['Year','HS10','SUPC','Description','SUPC_Desc']].drop_duplicates(),
+                on=['Year','HS10','SUPC'], how='left'
+            )
+            # Keep top 100 per year
+            hhi_table = hhi_table.sort_values(['Year','HHI'], ascending=[True,False]).groupby('Year').head(100)
 
             st.subheader("🏆 Top 100 Products by HHI")
             st.dataframe(hhi_table)
@@ -131,8 +148,9 @@ else:
                     product_hhi = product_hhi[product_hhi['SUPC'].astype(str).str.contains(supc_input, case=False)]
 
                 if not product_hhi.empty:
+                    # Display first match
                     prod = product_hhi.iloc[0]
-                    pci_value = prod.get('PCI', 'Not available')  # if PCI column exists
+                    pci_value = prod.get('PCI', 'Not available')
 
                     summary_text = f"""
 Selected Year(s): {', '.join(map(str, selected_years))}
@@ -142,19 +160,25 @@ Description (example): {prod.get('Description','N/A')}
 SUPC: {prod['SUPC']}
 SUPC Desc: {prod.get('SUPC_Desc','N/A')}
 
---- Year: {selected_years[0]} ---
+--- Year: {prod['Year']} ---
 Aggregate HHI: {prod['HHI']:.4f}
 """
                     st.text(summary_text)
 
-                    # -------------------- Top 10 Countries by Import Value --------------------
-                    top_countries = df_filtered.groupby('Country')['Value'].sum().reset_index().sort_values('Value', ascending=False).head(10)
+                    # -------------------- Top 10 Countries --------------------
+                    top_countries = (
+                        df_filtered[df_filtered['HS10']==prod['HS10']]
+                        .groupby('Country', as_index=False)['Value']
+                        .sum()
+                        .sort_values('Value', ascending=False)
+                        .head(10)
+                    )
                     st.subheader("🌎 Top 10 Countries by Import Value")
                     st.bar_chart(top_countries.set_index('Country')['Value'])
 
             # -------------------- Visualizations --------------------
             st.subheader("📈 Import Value by Year")
-            yearly_trend = df_filtered.groupby('Year')['Value'].sum().reset_index()
+            yearly_trend = df_filtered.groupby('Year', as_index=False)['Value'].sum()
             st.line_chart(yearly_trend.set_index('Year')['Value'])
 
             # -------------------- Data Preview --------------------
