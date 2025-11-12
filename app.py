@@ -10,7 +10,17 @@ st.title("🇨🇦 Trade KPIs Explorer")
 
 # -------------------- Functions --------------------
 @st.cache_data(show_spinner=False)
+def load_csv(url):
+    """Load small CSVs (cached)"""
+    try:
+        df = pd.read_csv(url)
+        return df
+    except Exception as e:
+        st.error(f"Failed to load CSV: {e}")
+        return pd.DataFrame()
+
 def load_parquet(url):
+    """Load large parquet dataset (no caching)"""
     try:
         response = requests.get(url, allow_redirects=True, timeout=60)
         response.raise_for_status()
@@ -21,15 +31,6 @@ def load_parquet(url):
         st.error(f"Failed to load dataset: {e}")
         return pd.DataFrame()
 
-@st.cache_data(show_spinner=False)
-def load_csv(url):
-    try:
-        df = pd.read_csv(url)
-        return df
-    except Exception as e:
-        st.error(f"Failed to load CSV: {e}")
-        return pd.DataFrame()
-
 def to_excel(df):
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
@@ -37,8 +38,8 @@ def to_excel(df):
     return output.getvalue()
 
 # -------------------- Load GitHub CSVs --------------------
-df_IPTB_url = "https://raw.githubusercontent.com/scswork/Trade/refs/heads/main/tauhat_nodist.csv"
-concordance_url = "https://raw.githubusercontent.com/scswork/Trade/refs/heads/main/Concordance%20ioic-naics-hs-supc.csv"
+df_IPTB_url = "https://raw.githubusercontent.com/<username>/<repo>/main/Trade/tauhat_nodist.csv"
+concordance_url = "https://raw.githubusercontent.com/<username>/<repo>/main/Trade/Concordance_ioic-naics-hs-supc.csv"
 
 df_IPTB = load_csv(df_IPTB_url)
 concordance = load_csv(concordance_url)
@@ -54,6 +55,10 @@ parquet_urls = {
 selected_file = st.sidebar.selectbox("Half-Year:", list(parquet_urls.keys()), index=3)
 
 if st.sidebar.button("Load Dataset"):
+    # Clear previous dataset to free memory
+    if "df_loaded" in st.session_state:
+        del st.session_state["df_loaded"]
+
     st.session_state["df_loaded"] = load_parquet(parquet_urls[selected_file])
     st.success(f"✅ Loaded {len(st.session_state['df_loaded']):,} rows from {selected_file}")
 
