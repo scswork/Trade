@@ -4,6 +4,7 @@ import numpy as np
 import requests
 import io
 from difflib import get_close_matches
+import matplotlib.colors as mcolors
 
 st.set_page_config(page_title="Trade KPIs Explorer", layout="wide")
 st.title("🇨🇦 Trade KPIs Explorer")
@@ -36,6 +37,16 @@ def to_excel(df):
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         df.to_excel(writer, index=False, sheet_name='TradeData')
     return output.getvalue()
+
+def color_scale(val, vmin, vmax):
+    """Return HTML background color for cell based on value"""
+    if pd.isna(val):
+        return ''
+    cmap = mcolors.LinearSegmentedColormap.from_list("", ["#f7fbff", "#08306b"])
+    norm_val = (val - vmin) / (vmax - vmin) if vmax > vmin else 0
+    hex_color = mcolors.to_hex(cmap(norm_val))
+    fg = "white" if norm_val > 0.5 else "black"
+    return f'background-color:{hex_color};color:{fg}'
 
 # -------------------- Load GitHub CSVs --------------------
 df_IPTB_url = "https://raw.githubusercontent.com/scswork/Trade/refs/heads/main/tauhat_nodist.csv"
@@ -85,9 +96,10 @@ else:
     hs_input = st.sidebar.text_input("HS10 Code:")
     supc_input = st.sidebar.text_input("SUPC Code:")
     desc_input = st.sidebar.text_input("Product Description:")
+    industry_input = st.sidebar.text_input("Industry Prefix (NAICS/IOIC):", "BS")
 
     if st.sidebar.button("Apply Filters"):
-        # Filter dataset
+        # -------------------- Filter dataset --------------------
         df_filtered = df_loaded.copy()
         if selected_years:
             df_filtered = df_filtered[df_filtered['Year'].isin(selected_years)]
@@ -118,18 +130,43 @@ else:
         if df_filtered.empty:
             st.warning("No data matches your filters.")
         else:
-            # Summary metrics
+            # -------------------- Summary Metrics --------------------
             col1, col2, col3 = st.columns(3)
             col1.metric("Total Records", f"{len(df_filtered):,}")
             col2.metric("Total Import Value", f"${df_filtered['Value'].sum():,.2f}")
             col3.metric("Total Quantity", f"{df_filtered['Quantity'].sum():,.2f}")
 
-            # Compute aggregate HHI
+            # -------------------- IPTB Matrix --------------------
+            st.subheader("📊 IPTB Matrix")
+
+            matrix_data = df_IPTB.copy()
+            if industry_input:
+                matrix_data = matrix_data[matrix_data['IndustryCode'].str.startswith(industry_input)]
+
+            # Create matrix pivot table
+            if not matrix_data.empty:
+                all_origins = sorted(matrix_data['Origin'].dropna().unique())
+                all_dests = sorted(matrix_data['Dest'].dropna().unique())
+                matrix_complete = pd.DataFrame(0, index=all_origins, columns=all_dests)
+
+                for _, row in matrix_data.iterrows():
+                    if pd.notna(row['Origin']) and pd.notna(row['Dest']) and pd.notna(row['TEC']):
+                        matrix_complete.at[row['Origin'], row['Dest']] = row['TEC']
+
+                # Color scaling
+                vmin = matrix_complete.min().min()
+                vmax = matrix_complete.max().max()
+                styled = matrix_complete.style.applymap(lambda x: color_scale(x, vmin, vmax))
+                st.dataframe(styled, use_container_width=True)
+            else:
+                st.info("No IPTB data matches the selected industry prefix.")
+
+            # -------------------- Aggregate HHI --------------------
             agg_hhi_df = df_filtered.groupby('Country', as_index=False)['Value'].sum()
             agg_hhi_df['Share'] = agg_hhi_df['Value'] / agg_hhi_df['Value'].sum()
             aggregate_hhi = (agg_hhi_df['Share'] ** 2).sum()
 
-            # Single-product summary
+            # -------------------- Single Product Summary --------------------
             st.subheader("🔹 Selected Product Summary (with Aggregate HHI)")
             product_info = df_filtered.copy()
             if hs_input:
@@ -164,11 +201,10 @@ Aggregate HHI (filtered data): {aggregate_hhi:.4f}
                 st.subheader("🌎 Top 10 Countries by Import Share")
                 st.dataframe(top_countries[['Year','Country','CountryValue','CountryQuantity','UoM','SharePercent']])
 
-            # Data preview
+            # -------------------- Data Preview --------------------
             st.subheader("🔍 Filtered Data Preview")
             st.dataframe(df_filtered.head(100))
 
-            # Downloads
+            # -------------------- Downloads --------------------
             st.download_button("⬇️ Download CSV", df_filtered.to_csv(index=False), "filtered_trade_data.csv", "text/csv")
             st.download_button("⬇️ Download Excel", to_excel(df_filtered), "filtered_trade_data.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-
