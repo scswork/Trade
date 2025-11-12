@@ -155,12 +155,18 @@ else:
                     if pd.notna(row['Origin']) and pd.notna(row['Dest']) and pd.notna(row['TEC']):
                         matrix_complete.at[row['Origin'], row['Dest']] = row['TEC']
 
+                # Ensure numeric matrix
+                matrix_complete = matrix_complete.apply(pd.to_numeric, errors='coerce')
+
                 vmin = matrix_complete.min().min()
                 vmax = matrix_complete.max().max()
-                styled = matrix_complete.style.applymap(lambda x: color_scale(x, vmin, vmax))
+
+                # Safe color scale: return empty string for NaN
+                styled = matrix_complete.style.applymap(
+                lambda x: color_scale(x, vmin, vmax) if pd.notna(x) else ''
+                )
                 st.dataframe(styled, use_container_width=True)
-            else:
-                st.info("No IPTB data matches the selected SUPC code.")
+
 
             # -------------------- Aggregate HHI --------------------
             agg_hhi_df = df_filtered.groupby('Country', as_index=False)['Value'].sum()
@@ -209,3 +215,4 @@ Aggregate HHI (filtered data): {aggregate_hhi:.4f}
             # -------------------- Downloads --------------------
             st.download_button("⬇️ Download CSV", df_filtered.to_csv(index=False), "filtered_trade_data.csv", "text/csv")
             st.download_button("⬇️ Download Excel", to_excel(df_filtered), "filtered_trade_data.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
