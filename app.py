@@ -137,29 +137,37 @@ else:
             col3.metric("Total Quantity", f"{df_filtered['Quantity'].sum():,.2f}")
 
             # -------------------- IPTB Matrix --------------------
-            st.subheader("📊 IPTB Matrix")
+            # -------------------- IPTB Matrix --------------------
+st.subheader("📊 IPTB Matrix")
 
-            matrix_data = df_IPTB.copy()
-            if industry_input:
-                matrix_data = matrix_data[matrix_data['IndustryCode'].str.startswith(industry_input)]
+matrix_data = df_IPTB.copy()
 
-            # Create matrix pivot table
-            if not matrix_data.empty:
-                all_origins = sorted(matrix_data['Origin'].dropna().unique())
-                all_dests = sorted(matrix_data['Dest'].dropna().unique())
-                matrix_complete = pd.DataFrame(0, index=all_origins, columns=all_dests)
+# Only filter by SUPC if provided
+if supc_input:
+    # Find NAICS/IOIC linked to this SUPC in loaded dataset
+    supc_match = df_loaded[df_loaded['SUPC'].astype(str).str.contains(supc_input, case=False)]
+    matched_codes = pd.concat([supc_match['naics_mod'], supc_match['ioic']]).dropna().unique()
+    # Filter matrix by matching IndustryCode
+    matrix_data = matrix_data[matrix_data['IndustryCode'].isin(matched_codes)]
 
-                for _, row in matrix_data.iterrows():
-                    if pd.notna(row['Origin']) and pd.notna(row['Dest']) and pd.notna(row['TEC']):
-                        matrix_complete.at[row['Origin'], row['Dest']] = row['TEC']
+# Default: show full IPTB dataset if no SUPC filter
+if not matrix_data.empty:
+    all_origins = sorted(matrix_data['Origin'].dropna().unique())
+    all_dests = sorted(matrix_data['Dest'].dropna().unique())
+    matrix_complete = pd.DataFrame(0, index=all_origins, columns=all_dests)
 
-                # Color scaling
-                vmin = matrix_complete.min().min()
-                vmax = matrix_complete.max().max()
-                styled = matrix_complete.style.applymap(lambda x: color_scale(x, vmin, vmax))
-                st.dataframe(styled, use_container_width=True)
-            else:
-                st.info("No IPTB data matches the selected industry prefix.")
+    for _, row in matrix_data.iterrows():
+        if pd.notna(row['Origin']) and pd.notna(row['Dest']) and pd.notna(row['TEC']):
+            matrix_complete.at[row['Origin'], row['Dest']] = row['TEC']
+
+    # Color scaling
+    vmin = matrix_complete.min().min()
+    vmax = matrix_complete.max().max()
+    styled = matrix_complete.style.applymap(lambda x: color_scale(x, vmin, vmax))
+    st.dataframe(styled, use_container_width=True)
+else:
+    st.info("No IPTB data matches the selected SUPC code.")
+
 
             # -------------------- Aggregate HHI --------------------
             agg_hhi_df = df_filtered.groupby('Country', as_index=False)['Value'].sum()
@@ -208,3 +216,4 @@ Aggregate HHI (filtered data): {aggregate_hhi:.4f}
             # -------------------- Downloads --------------------
             st.download_button("⬇️ Download CSV", df_filtered.to_csv(index=False), "filtered_trade_data.csv", "text/csv")
             st.download_button("⬇️ Download Excel", to_excel(df_filtered), "filtered_trade_data.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
