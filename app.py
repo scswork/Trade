@@ -38,8 +38,8 @@ def to_excel(df):
     return output.getvalue()
 
 # -------------------- Load GitHub CSVs --------------------
-df_IPTB_url = "https://raw.githubusercontent.com/<username>/<repo>/main/Trade/tauhat_nodist.csv"
-concordance_url = "https://raw.githubusercontent.com/<username>/<repo>/main/Trade/Concordance_ioic-naics-hs-supc.csv"
+df_IPTB_url = "https://raw.githubusercontent.com/scswork/Trade/refs/heads/main/tauhat_nodist.csv"
+concordance_url = "https://raw.githubusercontent.com/scswork/Trade/refs/heads/main/Concordance%20ioic-naics-hs-supc.csv"
 
 df_IPTB = load_csv(df_IPTB_url)
 concordance = load_csv(concordance_url)
@@ -171,3 +171,4 @@ Aggregate HHI (filtered data): {aggregate_hhi:.4f}
             # Downloads
             st.download_button("⬇️ Download CSV", df_filtered.to_csv(index=False), "filtered_trade_data.csv", "text/csv")
             st.download_button("⬇️ Download Excel", to_excel(df_filtered), "filtered_trade_data.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
