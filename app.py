@@ -33,13 +33,14 @@ def load_parquet(url):
         return pd.DataFrame()
 
 def to_excel(df):
+    """Export dataframe to Excel"""
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         df.to_excel(writer, index=False, sheet_name='TradeData')
     return output.getvalue()
 
 def color_scale(val, vmin, vmax):
-    """Return HTML background color for cell based on value"""
+    """Return HTML background color for IPTB matrix cell"""
     if pd.isna(val):
         return ''
     cmap = mcolors.LinearSegmentedColormap.from_list("", ["#f7fbff", "#08306b"])
@@ -49,8 +50,8 @@ def color_scale(val, vmin, vmax):
     return f'background-color:{hex_color};color:{fg}'
 
 # -------------------- Load GitHub CSVs --------------------
-df_IPTB_url = "https://raw.githubusercontent.com/scswork/Trade/refs/heads/main/tauhat_nodist.csv"
-concordance_url = "https://raw.githubusercontent.com/scswork/Trade/refs/heads/main/Concordance%20ioic-naics-hs-supc.csv"
+df_IPTB_url = "https://raw.githubusercontent.com/scswork/Trade/main/tauhat_nodist.csv"
+concordance_url = "https://raw.githubusercontent.com/scswork/Trade/main/Concordance%20ioic-naics-hs-supc.csv"
 
 df_IPTB = load_csv(df_IPTB_url)
 concordance = load_csv(concordance_url)
@@ -69,7 +70,6 @@ if st.sidebar.button("Load Dataset"):
     # Clear previous dataset to free memory
     if "df_loaded" in st.session_state:
         del st.session_state["df_loaded"]
-
     st.session_state["df_loaded"] = load_parquet(parquet_urls[selected_file])
     st.success(f"✅ Loaded {len(st.session_state['df_loaded']):,} rows from {selected_file}")
 
@@ -136,37 +136,31 @@ else:
             col2.metric("Total Import Value", f"${df_filtered['Value'].sum():,.2f}")
             col3.metric("Total Quantity", f"{df_filtered['Quantity'].sum():,.2f}")
 
-                        # -------------------- IPTB Matrix --------------------
-        st.subheader("📊 IPTB Matrix")
+            # -------------------- IPTB Matrix --------------------
+            st.subheader("📊 IPTB Matrix")
+            matrix_data = df_IPTB.copy()
 
-        matrix_data = df_IPTB.copy()
+            # Filter by SUPC if provided
+            if supc_input:
+                supc_match = df_loaded[df_loaded['SUPC'].astype(str).str.contains(supc_input, case=False)]
+                matched_codes = pd.concat([supc_match['naics_mod'], supc_match['ioic']]).dropna().unique()
+                matrix_data = matrix_data[matrix_data['IndustryCode'].isin(matched_codes)]
 
-        # Only filter by SUPC if provided
-        if supc_input:
-            # Find NAICS/IOIC linked to this SUPC in loaded dataset
-            supc_match = df_loaded[df_loaded['SUPC'].astype(str).str.contains(supc_input, case=False)]
-            matched_codes = pd.concat([supc_match['naics_mod'], supc_match['ioic']]).dropna().unique()
-            # Filter matrix by matching IndustryCode
-            matrix_data = matrix_data[matrix_data['IndustryCode'].isin(matched_codes)]
+            if not matrix_data.empty:
+                all_origins = sorted(matrix_data['Origin'].dropna().unique())
+                all_dests = sorted(matrix_data['Dest'].dropna().unique())
+                matrix_complete = pd.DataFrame(0, index=all_origins, columns=all_dests)
 
-        # Default: show full IPTB dataset if no SUPC filter
-        if not matrix_data.empty:
-            all_origins = sorted(matrix_data['Origin'].dropna().unique())
-            all_dests = sorted(matrix_data['Dest'].dropna().unique())
-            matrix_complete = pd.DataFrame(0, index=all_origins, columns=all_dests)
+                for _, row in matrix_data.iterrows():
+                    if pd.notna(row['Origin']) and pd.notna(row['Dest']) and pd.notna(row['TEC']):
+                        matrix_complete.at[row['Origin'], row['Dest']] = row['TEC']
 
-            for _, row in matrix_data.iterrows():
-                if pd.notna(row['Origin']) and pd.notna(row['Dest']) and pd.notna(row['TEC']):
-                    matrix_complete.at[row['Origin'], row['Dest']] = row['TEC']
-
-            # Color scaling
-            vmin = matrix_complete.min().min()
-            vmax = matrix_complete.max().max()
-            styled = matrix_complete.style.applymap(lambda x: color_scale(x, vmin, vmax))
-            st.dataframe(styled, use_container_width=True)
-        else:
-            st.info("No IPTB data matches the selected SUPC code.")
-
+                vmin = matrix_complete.min().min()
+                vmax = matrix_complete.max().max()
+                styled = matrix_complete.style.applymap(lambda x: color_scale(x, vmin, vmax))
+                st.dataframe(styled, use_container_width=True)
+            else:
+                st.info("No IPTB data matches the selected SUPC code.")
 
             # -------------------- Aggregate HHI --------------------
             agg_hhi_df = df_filtered.groupby('Country', as_index=False)['Value'].sum()
@@ -182,7 +176,7 @@ else:
                 product_info = product_info[product_info['SUPC'].astype(str).str.contains(supc_input, case=False)]
 
             if not product_info.empty:
-                prod = product_info.iloc[0]  # first match
+                prod = product_info.iloc[0]
                 pci_value = prod.get('pci_2023', 'Not available')
                 summary_text = f"""
 HS10: {prod['HS10']}
@@ -194,7 +188,7 @@ Aggregate HHI (filtered data): {aggregate_hhi:.4f}
 """
                 st.text(summary_text)
 
-                # Top 10 countries by import share
+                # -------------------- Top 10 Countries --------------------
                 top_countries = (
                     df_filtered[(df_filtered['HS10']==prod['HS10']) & (df_filtered['SUPC']==prod['SUPC'])]
                     .groupby(['Year','Country','UoM'], as_index=False)
@@ -208,12 +202,10 @@ Aggregate HHI (filtered data): {aggregate_hhi:.4f}
                 st.subheader("🌎 Top 10 Countries by Import Share")
                 st.dataframe(top_countries[['Year','Country','CountryValue','CountryQuantity','UoM','SharePercent']])
 
-            # -------------------- Data Preview --------------------
+            # -------------------- Filtered Data Preview --------------------
             st.subheader("🔍 Filtered Data Preview")
             st.dataframe(df_filtered.head(100))
 
             # -------------------- Downloads --------------------
             st.download_button("⬇️ Download CSV", df_filtered.to_csv(index=False), "filtered_trade_data.csv", "text/csv")
             st.download_button("⬇️ Download Excel", to_excel(df_filtered), "filtered_trade_data.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-
-
