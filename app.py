@@ -138,14 +138,18 @@ else:
 
             # -------------------- IPTB Matrix --------------------
             st.subheader("📊 IPTB Matrix")
+
             matrix_data = df_IPTB.copy()
 
-            # Filter by SUPC if provided
+            # Only filter by SUPC if provided
             if supc_input:
+                # Find NAICS/IOIC linked to this SUPC in loaded dataset
                 supc_match = df_loaded[df_loaded['SUPC'].astype(str).str.contains(supc_input, case=False)]
                 matched_codes = pd.concat([supc_match['naics_mod'], supc_match['ioic']]).dropna().unique()
+                # Filter matrix by matching IndustryCode
                 matrix_data = matrix_data[matrix_data['IndustryCode'].isin(matched_codes)]
-
+    
+            # Default: show full IPTB dataset if no SUPC filter
             if not matrix_data.empty:
                 all_origins = sorted(matrix_data['Origin'].dropna().unique())
                 all_dests = sorted(matrix_data['Dest'].dropna().unique())
@@ -155,18 +159,10 @@ else:
                     if pd.notna(row['Origin']) and pd.notna(row['Dest']) and pd.notna(row['TEC']):
                         matrix_complete.at[row['Origin'], row['Dest']] = row['TEC']
 
-                # Ensure numeric matrix
-                matrix_complete = matrix_complete.apply(pd.to_numeric, errors='coerce')
-
-                vmin = matrix_complete.min().min()
-                vmax = matrix_complete.max().max()
-
-                # Safe color scale: return empty string for NaN
-                styled = matrix_complete.style.applymap(
-                lambda x: color_scale(x, vmin, vmax) if pd.notna(x) else ''
-                )
-                st.dataframe(styled, use_container_width=True)
-
+                # Display numeric matrix
+                st.dataframe(matrix_complete.fillna(0), use_container_width=True)
+            else:
+                st.info("No IPTB data matches the selected SUPC code.")
 
             # -------------------- Aggregate HHI --------------------
             agg_hhi_df = df_filtered.groupby('Country', as_index=False)['Value'].sum()
@@ -215,4 +211,5 @@ Aggregate HHI (filtered data): {aggregate_hhi:.4f}
             # -------------------- Downloads --------------------
             st.download_button("⬇️ Download CSV", df_filtered.to_csv(index=False), "filtered_trade_data.csv", "text/csv")
             st.download_button("⬇️ Download Excel", to_excel(df_filtered), "filtered_trade_data.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
 
