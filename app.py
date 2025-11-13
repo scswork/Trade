@@ -7,7 +7,18 @@ from difflib import get_close_matches
 import matplotlib.colors as mcolors
 
 st.set_page_config(page_title="Trade KPIs Explorer", layout="wide")
-st.title("🇨🇦 Trade KPIs Explorer")
+st.title("Canada Imports KPI Explorer")
+
+# -------------------- Welcome Section --------------------
+st.markdown("""
+### This tool allows you to explore Canada's interprovincial and international trade data by product, province, and country.
+
+**The source of the trade data can be found at https://open.canada.ca/data/en/dataset/2909a648-5753-4924-878a-b069392d9cde/resource/75e39f3f-d5c1-4f02-8919-5c9daf79fadc
+
+You can load a specific half-year dataset from the sidebar to begin your analysis.
+""")
+st.divider()
+
 
 # -------------------- Functions --------------------
 @st.cache_data(show_spinner=False)
@@ -213,6 +224,7 @@ Aggregate HHI (filtered data): {aggregate_hhi:.4f}
             # -------------------- Downloads --------------------
             st.download_button("⬇️ Download CSV", df_filtered.to_csv(index=False), "filtered_trade_data.csv", "text/csv")
             st.download_button("⬇️ Download Excel", to_excel(df_filtered), "filtered_trade_data.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
 
 
 
